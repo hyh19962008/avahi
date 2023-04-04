@@ -577,6 +577,7 @@ static int server_add_service_strlst_nocopy(
     const char *domain,
     const char *host,
     uint16_t port,
+    uint32_t ttl,
     AvahiStringList *strlst) {
 
     char ptr_name[AVAHI_DOMAIN_NAME_MAX], svc_name[AVAHI_DOMAIN_NAME_MAX], enum_ptr[AVAHI_DOMAIN_NAME_MAX], *h = NULL;
@@ -639,6 +640,7 @@ static int server_add_service_strlst_nocopy(
     r->data.srv.weight = 0;
     r->data.srv.port = port;
     r->data.srv.name = h;
+    r->ttl = (ttl == AVAHI_IGNORE_TTL) ? r->ttl : ttl;
     h = NULL;
     srv_entry = server_add_internal(s, g, interface, protocol, AVAHI_PUBLISH_UNIQUE, r);
     avahi_record_unref(r);
@@ -703,7 +705,28 @@ int avahi_server_add_service_strlst(
     assert(type);
     assert(name);
 
-    return server_add_service_strlst_nocopy(s, g, interface, protocol, flags, name, type, domain, host, port, avahi_string_list_copy(strlst));
+    return server_add_service_strlst_nocopy(s, g, interface, protocol, flags, name, type, domain, host, port, AVAHI_IGNORE_TTL, avahi_string_list_copy(strlst));
+}
+
+int avahi_server_add_service_strlst_ttl(
+    AvahiServer *s,
+    AvahiSEntryGroup *g,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiPublishFlags flags,
+    const char *name,
+    const char *type,
+    const char *domain,
+    const char *host,
+    uint16_t port,
+    uint32_t ttl,
+    AvahiStringList *strlst) {
+
+    assert(s);
+    assert(type);
+    assert(name);
+
+    return server_add_service_strlst_nocopy(s, g, interface, protocol, flags, name, type, domain, host, port, ttl, avahi_string_list_copy(strlst));
 }
 
 int avahi_server_add_service(
@@ -723,7 +746,31 @@ int avahi_server_add_service(
     int ret;
 
     va_start(va, port);
-    ret = server_add_service_strlst_nocopy(s, g, interface, protocol, flags, name, type, domain, host, port, avahi_string_list_new_va(va));
+    ret = server_add_service_strlst_nocopy(s, g, interface, protocol, flags, name, type, domain, host, port, AVAHI_IGNORE_TTL, avahi_string_list_new_va(va));
+    va_end(va);
+
+    return ret;
+}
+
+int avahi_server_add_service_ttl(
+    AvahiServer *s,
+    AvahiSEntryGroup *g,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiPublishFlags flags,
+    const char *name,
+    const char *type,
+    const char *domain,
+    const char *host,
+    uint16_t port,
+    uint32_t ttl,
+    ... ){
+
+    va_list va;
+    int ret;
+
+    va_start(va, ttl);
+    ret = server_add_service_strlst_nocopy(s, g, interface, protocol, flags, name, type, domain, host, port, ttl, avahi_string_list_new_va(va));
     va_end(va);
 
     return ret;

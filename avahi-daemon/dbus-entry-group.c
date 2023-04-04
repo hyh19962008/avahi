@@ -210,6 +210,54 @@ DBusHandlerResult avahi_dbus_msg_entry_group_impl(DBusConnection *c, DBusMessage
 
         return avahi_dbus_respond_ok(c, m);
 
+    } else if (dbus_message_is_method_call(m, AVAHI_DBUS_INTERFACE_ENTRY_GROUP, "AddServiceTTL")) {
+        int32_t interface, protocol;
+        uint32_t flags, ttl;
+        char *type, *name, *domain, *host;
+        uint16_t port;
+        AvahiStringList *strlst = NULL;
+
+        if (!dbus_message_get_args(
+                m, &error,
+                DBUS_TYPE_INT32, &interface,
+                DBUS_TYPE_INT32, &protocol,
+                DBUS_TYPE_UINT32, &flags,
+                DBUS_TYPE_STRING, &name,
+                DBUS_TYPE_STRING, &type,
+                DBUS_TYPE_STRING, &domain,
+                DBUS_TYPE_STRING, &host,
+                DBUS_TYPE_UINT16, &port,
+                DBUS_TYPE_UINT32, &ttl,
+                DBUS_TYPE_INVALID) ||
+            !type || !name ||
+            avahi_dbus_read_strlst(m, 9, &strlst) < 0) {
+            avahi_log_warn("Error parsing EntryGroup::AddService message");
+            goto fail;
+        }
+
+        if (!(flags & AVAHI_PUBLISH_UPDATE) && i->n_entries >= server->n_entries_per_entry_group_max) {
+            avahi_string_list_free(strlst);
+            return avahi_dbus_respond_error(c, m, AVAHI_ERR_TOO_MANY_ENTRIES, NULL);
+        }
+
+        if (domain && !*domain)
+            domain = NULL;
+
+        if (host && !*host)
+            host = NULL;
+
+        if (avahi_server_add_service_strlst_ttl(avahi_server, i->entry_group, (AvahiIfIndex) interface, (AvahiProtocol) protocol, (AvahiPublishFlags) flags, name, type, domain, host, port, ttl, strlst) < 0) {
+            avahi_string_list_free(strlst);
+            return avahi_dbus_respond_error(c, m, avahi_server_errno(avahi_server), NULL);
+        }
+
+        if (!(flags & AVAHI_PUBLISH_UPDATE))
+            i->n_entries ++;
+
+        avahi_string_list_free(strlst);
+
+        return avahi_dbus_respond_ok(c, m);
+
     } else if (dbus_message_is_method_call(m, AVAHI_DBUS_INTERFACE_ENTRY_GROUP, "AddServiceSubtype")) {
 
         int32_t interface, protocol;

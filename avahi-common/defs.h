@@ -22,6 +22,7 @@
 
 /** \file defs.h Some common definitions */
 
+#include <limits.h>
 #include <avahi-common/cdecl.h>
 
 /** \mainpage
@@ -350,6 +351,9 @@ enum {
 
 /** The default TTL for all other records. */
 #define AVAHI_DEFAULT_TTL (75*60)
+
+/** The TTL value that should be ignored and use default one, let's hope no user will use it. */
+#define AVAHI_IGNORE_TTL (UINT_MAX - 1)
 
 AVAHI_C_DECL_END
 

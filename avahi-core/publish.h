@@ -117,6 +117,21 @@ int avahi_server_add_service(
     uint16_t port,              /**< Port number of the service */
     ...  /**< Text records, terminated by NULL */) AVAHI_GCC_SENTINEL;
 
+/** avahi_server_add_service() with TTL option */
+int avahi_server_add_service_ttl(
+    AvahiServer *s,
+    AvahiSEntryGroup *g,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiPublishFlags flags,
+    const char *name,         /**< Service name, e.g. "Lennart's Files" */
+    const char *type,         /**< DNS-SD type, e.g. "_http._tcp" */
+    const char *domain,
+    const char *host,         /**< Host name where this servcie resides, or NULL if on the local host */
+    uint16_t port,              /**< Port number of the service */
+    uint32_t ttl,               /**< TTL value of the service */
+    ...  /**< Text records, terminated by NULL */) AVAHI_GCC_SENTINEL;
+
 /** Mostly identical to avahi_server_add_service(), but takes an AvahiStringList object for the TXT records.  The AvahiStringList object is copied. */
 int avahi_server_add_service_strlst(
     AvahiServer *s,
@@ -129,6 +144,21 @@ int avahi_server_add_service_strlst(
     const char *domain,
     const char *host,
     uint16_t port,
+    AvahiStringList *strlst);
+
+/** Mostly identical to avahi_server_add_service(), but takes an AvahiStringList object for the TXT records.  The AvahiStringList object is copied. */
+int avahi_server_add_service_strlst_ttl(
+    AvahiServer *s,
+    AvahiSEntryGroup *g,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiPublishFlags flags,
+    const char *name,
+    const char *type,
+    const char *domain,
+    const char *host,
+    uint16_t port,
+    uint32_t ttl,
     AvahiStringList *strlst);
 
 /** Add a subtype for an already existing service */

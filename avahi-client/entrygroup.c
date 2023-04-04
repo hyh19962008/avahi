@@ -493,6 +493,102 @@ fail:
     return r;
 }
 
+int avahi_entry_group_add_service_strlst_ttl(
+    AvahiEntryGroup *group,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiPublishFlags flags,
+    const char *name,
+    const char *type,
+    const char *domain,
+    const char *host,
+    uint16_t port,
+    uint32_t ttl,
+    AvahiStringList *txt) {
+
+    DBusMessage *message = NULL, *reply = NULL;
+    int r = AVAHI_OK;
+    DBusError error;
+    AvahiClient *client;
+    int32_t i_interface, i_protocol;
+    uint32_t u_flags;
+
+    assert(group);
+    assert(name);
+    assert(type);
+
+    client = group->client;
+
+    if (!group->path || !avahi_client_is_connected(group->client))
+        return avahi_client_set_errno(group->client, AVAHI_ERR_BAD_STATE);
+
+    if (!domain)
+        domain = "";
+
+    if (!host)
+        host = "";
+
+    dbus_error_init(&error);
+
+    if (!(message = dbus_message_new_method_call (AVAHI_DBUS_NAME, group->path, AVAHI_DBUS_INTERFACE_ENTRY_GROUP, "AddServiceTTL"))) {
+        r = avahi_client_set_errno(client, AVAHI_ERR_NO_MEMORY);
+        goto fail;
+    }
+
+    i_interface = (int32_t) interface;
+    i_protocol = (int32_t) protocol;
+    u_flags = (uint32_t) flags;
+
+    if (!dbus_message_append_args(
+            message,
+            DBUS_TYPE_INT32, &i_interface,
+            DBUS_TYPE_INT32, &i_protocol,
+            DBUS_TYPE_UINT32, &u_flags,
+            DBUS_TYPE_STRING, &name,
+            DBUS_TYPE_STRING, &type,
+            DBUS_TYPE_STRING, &domain,
+            DBUS_TYPE_STRING, &host,
+            DBUS_TYPE_UINT16, &port,
+            DBUS_TYPE_UINT32, &ttl,
+            DBUS_TYPE_INVALID) ||
+        append_string_list(message, txt) < 0) {
+        r = avahi_client_set_errno(group->client, AVAHI_ERR_NO_MEMORY);
+        goto fail;
+    }
+
+    if (!(reply = dbus_connection_send_with_reply_and_block(client->bus, message, -1, &error)) ||
+        dbus_error_is_set (&error)) {
+        r = avahi_client_set_errno(client, AVAHI_ERR_DBUS_ERROR);
+        goto fail;
+    }
+
+    if (!dbus_message_get_args(reply, &error, DBUS_TYPE_INVALID) ||
+        dbus_error_is_set (&error)) {
+        r = avahi_client_set_errno(client, AVAHI_ERR_DBUS_ERROR);
+        goto fail;
+    }
+
+    dbus_message_unref(message);
+    dbus_message_unref(reply);
+
+    return AVAHI_OK;
+
+fail:
+
+    if (dbus_error_is_set(&error)) {
+        r = avahi_client_set_dbus_error(client, &error);
+        dbus_error_free(&error);
+    }
+
+    if (message)
+        dbus_message_unref(message);
+
+    if (reply)
+        dbus_message_unref(reply);
+
+    return r;
+}
+
 int avahi_entry_group_add_service(
     AvahiEntryGroup *group,
     AvahiIfIndex interface,
@@ -514,6 +610,33 @@ int avahi_entry_group_add_service(
     va_start(va, port);
     txt = avahi_string_list_new_va(va);
     r = avahi_entry_group_add_service_strlst(group, interface, protocol, flags, name, type, domain, host, port, txt);
+    avahi_string_list_free(txt);
+    va_end(va);
+    return r;
+}
+
+int avahi_entry_group_add_service_ttl(
+    AvahiEntryGroup *group,
+    AvahiIfIndex interface,
+    AvahiProtocol protocol,
+    AvahiPublishFlags flags,
+    const char *name,
+    const char *type,
+    const char *domain,
+    const char *host,
+    uint16_t port,
+    uint32_t ttl,
+    ...) {
+
+    va_list va;
+    int r;
+    AvahiStringList *txt;
+
+    assert(group);
+
+    va_start(va, ttl);
+    txt = avahi_string_list_new_va(va);
+    r = avahi_entry_group_add_service_strlst_ttl(group, interface, protocol, flags, name, type, domain, host, port, ttl, txt);
     avahi_string_list_free(txt);
     va_end(va);
     return r;
