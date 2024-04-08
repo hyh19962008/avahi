@@ -10,6 +10,23 @@ export COVERAGE=${COVERAGE:-false}
 export DISTCHECK=${DISTCHECK:-false}
 export VALGRIND=${VALGRIND:-false}
 
+look_for_asan_ubsan_reports() {
+    journalctl --sync
+    set +o pipefail
+    pids="$(
+        journalctl -b -u 'avahi-*' --grep 'SUMMARY: .*Sanitizer:' |
+        sed -r -n 's/.* .+\[([0-9]+)\]: SUMMARY:.*/\1/p'
+    )"
+    set -o pipefail
+
+    if [[ -n "$pids" ]]; then
+        for pid in $pids; do
+           journalctl -b _PID="$pid" --no-pager
+        done
+        return 1
+    fi
+}
+
 case "$1" in
     install-build-deps)
         sed -i -e '/^#\s*deb-src.*\smain\s\+restricted/s/^#//' /etc/apt/sources.list
@@ -18,7 +35,7 @@ case "$1" in
         apt-get install -y libevent-dev qtbase5-dev libsystemd-dev
         apt-get install -y gcc clang lcov
 
-        apt-get install -y valgrind ncat
+        apt-get install -y valgrind ncat ldnsutils
 
         apt-get install -y libglib2.0-dev meson
         git clone https://github.com/dbus-fuzzer/dfuzzer
@@ -73,11 +90,24 @@ case "$1" in
 
         sed -i '/^ExecStart=/s/$/ --debug /' avahi-daemon/avahi-daemon.service
 
+        # avahi-dnsconfd is used to test the DNS server browser only.
+        # It shouldn't actually change any settings so the action just
+        # logs what it receives from avahi-daemon.
+        cat <<'EOL' >avahi-dnsconfd/avahi-dnsconfd.action
+#!/bin/bash
+
+printf "%s\n" "<$1> <$2> <$3> <$4>" | systemd-cat
+EOL
+
         if [[ "$VALGRIND" == true ]]; then
             sed -i '
                 /^ExecStart/s/=/=valgrind --leak-check=full --track-origins=yes --track-fds=yes --error-exitcode=1 /
             ' avahi-daemon/avahi-daemon.service
             sed -i '/^ExecStart=/s/$/ --no-chroot --no-drop-root --no-proc-title/' avahi-daemon/avahi-daemon.service
+
+            sed -i '
+                /^ExecStart/s/=/=valgrind --leak-check=full --track-origins=yes --track-fds=yes --error-exitcode=1 /
+            ' avahi-dnsconfd/avahi-dnsconfd.service
         fi
 
         if [[ "$COVERAGE" == true ]]; then
@@ -88,22 +118,31 @@ case "$1" in
             sed -i '/^ExecStart=/s/$/ --no-drop-root --no-proc-title/' avahi-daemon/avahi-daemon.service
             sed -i "/^\[Service\]/aEnvironment=ASAN_OPTIONS=$ASAN_OPTIONS" avahi-daemon/avahi-daemon.service
             sed -i "/^\[Service\]/aEnvironment=UBSAN_OPTIONS=$UBSAN_OPTIONS" avahi-daemon/avahi-daemon.service
+
+            sed -i "/^\[Service\]/aEnvironment=ASAN_OPTIONS=$ASAN_OPTIONS" avahi-dnsconfd/avahi-dnsconfd.service
+            sed -i "/^\[Service\]/aEnvironment=UBSAN_OPTIONS=$UBSAN_OPTIONS" avahi-dnsconfd/avahi-dnsconfd.service
         fi
 
-        # publish-workstation=yes triggers https://github.com/lathiat/avahi/issues/485
+        # publish-workstation=yes triggers https://github.com/avahi/avahi/issues/485
         # so it isn't set to yes here.
         sed -i '
             s/^#\(add-service-cookie=\).*/\1yes/;
+            s/^#\(publish-dns-servers=\)/\1/;
+            s/^#\(publish-resolv-conf-dns-servers=\).*/\1yes/;
             s/^\(publish-hinfo=\).*/\1yes/;
         ' avahi-daemon/avahi-daemon.conf
 
         printf "2001:db8::1 static-host-test.local\n" >>avahi-daemon/hosts
 
-        sudo make install
-        sudo ldconfig
-        sudo adduser --system --group avahi
-        sudo systemctl reload dbus
-        sudo .github/workflows/smoke-tests.sh
+        make install
+        ldconfig
+        adduser --system --group avahi
+        systemctl reload dbus
+
+        if ! .github/workflows/smoke-tests.sh; then
+            look_for_asan_ubsan_reports
+            exit 1
+        fi
 
         if [[ "$COVERAGE" == true ]]; then
             lcov --directory . --capture --initial --output-file coverage.info.initial

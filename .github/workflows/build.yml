@@ -24,16 +24,16 @@ jobs:
         env:
           - { CC: "gcc", DISTCHECK: "true", VALGRIND: "true" }
           - { CC: "gcc", ASAN_UBSAN: "true" }
-          - { CC: "clang" }
+          - { CC: "clang", ASAN_UBSAN: "false" }
           - { CC: "clang", ASAN_UBSAN: "true" }
     env: ${{ matrix.env }}
     steps:
       - name: Repository checkout
         uses: actions/checkout@v4
       - run: sudo -E .github/workflows/build.sh install-build-deps
-      - run: .github/workflows/build.sh build
+      - run: sudo -E .github/workflows/build.sh build
   coverage:
-    if: github.repository == 'lathiat/avahi'
+    if: github.repository == 'avahi/avahi'
     runs-on: ubuntu-22.04
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,7 +48,7 @@ jobs:
       - name: Repository checkout
         uses: actions/checkout@v4
       - run: sudo -E .github/workflows/build.sh install-build-deps
-      - run: .github/workflows/build.sh build
+      - run: sudo -E .github/workflows/build.sh build
       - name: Coveralls
         uses: coverallsapp/github-action@v2
         with:
